@@ -1,0 +1,24 @@
+=== board標準表示（python-shogi） ===
+ .  .  .  .  .  .  .  .  .
++R  .  G  .  .  .  .  .  .
+ b +N  .  .  p  .  .  p  .
+ p  .  s  p  .  .  .  .  p
+ .  k  .  .  P  s  p  P  .
+ P  .  P  .  .  .  .  .  P
+ .  P  N  L +b  .  P  .  .
+ L  .  G  .  .  .  .  .  .
+ K  .  G  .  .  .  .  . +r
+
+ P*4 L*1 N*1 p*1 s*2 n*1 g*1 l*1
+
+=== ラベルグリッド（画像の向き: 左=先手, 上=9筋） ===
+    col0       col1       col2       col3       col4       col5       col6       col7       col8       
+r0(9筋) S:ou       S:kyo      empty      S:fu       empty      G:fu       G:kaku     S:ryu      empty      
+r1(8筋) empty      empty      S:fu       empty      G:ou       empty      S:nari_kei empty      empty      
+r2(7筋) S:kin      S:kin      S:kei      S:fu       empty      G:gin      empty      S:kin      empty      
+r3(6筋) empty      empty      S:kyo      empty      empty      G:fu       empty      empty      empty      
+r4(5筋) empty      empty      G:uma      empty      S:fu       empty      G:fu       empty      empty      
+r5(4筋) empty      empty      empty      empty      G:gin      empty      empty      empty      empty      
+r6(3筋) empty      empty      S:fu       empty      G:fu       empty      empty      empty      empty      
+r7(2筋) empty      empty      empty      empty      S:fu       empty      G:fu       empty      empty      
+r8(1筋) G:ryu      empty      empty      S:fu       empty      G:fu       empty      empty      empty      

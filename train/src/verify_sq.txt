@@ -1,0 +1,38 @@
+square | name | piece | color
+----------------------------------------
+   0   | 9a  | +b  | sente(B)
+   5   | 4a  | k   | gote(W)
+   7   | 2a  | n   | gote(W)
+   8   | 1a  | l   | gote(W)
+  13   | 5b  | g   | gote(W)
+  15   | 3b  | s   | gote(W)
+  22   | 5c  | p   | gote(W)
+  25   | 2c  | p   | gote(W)
+  27   | 9d  | p   | gote(W)
+  29   | 7d  | r   | gote(W)
+  32   | 4d  | n   | sente(B)
+  35   | 1d  | p   | gote(W)
+  41   | 4e  | p   | sente(B)
+  42   | 3e  | p   | sente(B)
+  43   | 2e  | n   | sente(B)
+  45   | 9f  | p   | sente(B)
+  48   | 6f  | l   | gote(W)
+  49   | 5f  | g   | gote(W)
+  51   | 3f  | p   | gote(W)
+  53   | 1f  | p   | sente(B)
+  55   | 8g  | p   | sente(B)
+  56   | 7g  | n   | sente(B)
+  57   | 6g  | p   | sente(B)
+  58   | 5g  | s   | gote(W)
+  65   | 7h  | g   | sente(B)
+  66   | 6h  | s   | gote(W)
+  71   | 1h  | l   | sente(B)
+  72   | 9i  | l   | sente(B)
+  75   | 6i  | k   | sente(B)
+  79   | 2i  | r   | sente(B)
+
+特定駒の位置確認:
+（KIF最終局面で先手の馬は9筋1段='9a'=square0付近にいるはず）
+  馬(uma): square=0, name=9a, color=sente
+  玉(ou):  square=5, name=4a, color=gote
+  玉(ou):  square=75, name=6i, color=sente

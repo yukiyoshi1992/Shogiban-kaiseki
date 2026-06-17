@@ -1,0 +1,2 @@
+作業の区切りごとに docs/handover.md を更新してください
+更新したら教えてください。gitをcommitします。

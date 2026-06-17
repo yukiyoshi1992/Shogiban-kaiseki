@@ -38,11 +38,11 @@ from pathlib import Path
 # -------------------------------------------------------
 SYMBOL_TO_LABEL = {
     "S香":"sente_kyo","S桂":"sente_kei","S銀":"sente_gin","S金":"sente_kin",
-    "S角":"sente_kaku","S飛":"sente_hi","S玉":"sente_ou","S歩":"sente_fu",
+    "S角":"sente_kaku","S飛":"sente_hi","S玉":"sente_ou","S王":"sente_ou","S歩":"sente_fu",
     "Sと":"sente_tokin","S杏":"sente_nari_kyo","S圭":"sente_nari_kei",
     "S全":"sente_nari_gin","S馬":"sente_uma","S龍":"sente_ryu",
     "G香":"gote_kyo","G桂":"gote_kei","G銀":"gote_gin","G金":"gote_kin",
-    "G角":"gote_kaku","G飛":"gote_hi","G玉":"gote_ou","G歩":"gote_fu",
+    "G角":"gote_kaku","G飛":"gote_hi","G玉":"gote_ou","G王":"gote_ou","G歩":"gote_fu",
     "Gと":"gote_tokin","G杏":"gote_nari_kyo","G圭":"gote_nari_kei",
     "G全":"gote_nari_gin","G馬":"gote_uma","G龍":"gote_ryu",
     ".":"empty",
@@ -95,13 +95,13 @@ def pattern_to_label_grid(pattern_grid):
     return grid
 
 def detect_pattern_num(filename):
-    """ファイル名からパターン番号を抽出（pattern3, p3, 3 などに対応）"""
-    m = re.search(r'pattern\s*(\d+)', filename, re.IGNORECASE)
+    """ファイル名からパターン番号を抽出（pattern3, pattern10a, p3 などに対応）"""
+    m = re.search(r'pattern\s*(\d+[a-zA-Z]?)', filename, re.IGNORECASE)
     if m:
-        return int(m.group(1))
-    m = re.search(r'p(\d+)', filename, re.IGNORECASE)
+        return m.group(1).lower()
+    m = re.search(r'p(\d+[a-zA-Z]?)', filename, re.IGNORECASE)
     if m:
-        return int(m.group(1))
+        return m.group(1).lower()
     return None
 
 def detect_shift_pattern(filename):
@@ -117,19 +117,39 @@ def detect_shift_pattern(filename):
 
 def shift_pattern_to_label_grid(row_def, target_row):
     """
-    1行ぶんの駒定義を指定行に配置した9x9ラベルグリッドを作る
-    row_def: 9要素の駒記号リスト（1行ぶん）
-    target_row: 0-8、この行に駒を置く
+    駒定義を指定行から配置した9x9ラベルグリッドを作る
+    row_def:
+      - 9要素の駒記号リスト（1行ぶん。旧形式）→ target_row に配置
+      - {"rows": N, "row0":[...], "row1":[...], ...}（新形式。複数行を
+        まとめて1枚に撮影するshift_all/shift_nari用）→ rowK を target_row+k に配置
+        （target_row+k が9を超える行は盤外なので無視）
+    target_row: 0-8、配置の基準行
     """
     grid = [["empty"]*9 for _ in range(9)]
-    for col, sym in enumerate(row_def):
-        label = SYMBOL_TO_LABEL.get(sym, "empty")
-        grid[target_row][col] = label
+    if isinstance(row_def, dict):
+        n_rows = row_def.get("rows", 1)
+        for k in range(n_rows):
+            r = target_row + k
+            if r > 8:
+                continue
+            for col, sym in enumerate(row_def[f"row{k}"]):
+                grid[r][col] = SYMBOL_TO_LABEL.get(sym, "empty")
+    else:
+        for col, sym in enumerate(row_def):
+            grid[target_row][col] = SYMBOL_TO_LABEL.get(sym, "empty")
     return grid
 
-def find_calib(calibs_folder, img_stem):
+def find_calib(calibs_folder, img_stem, fallback_key=None):
+    """画像ごとのcalibを探す。無ければ fallback_key（パターン名等）共用のcalibを試す
+    （1パターン1キャリブを複数画像に適用するケース向け）"""
     p = Path(calibs_folder) / f"{img_stem}_calib.json"
-    return p if p.exists() else None
+    if p.exists():
+        return p
+    if fallback_key:
+        p2 = Path(calibs_folder) / f"{fallback_key}_calib.json"
+        if p2.exists():
+            return p2
+    return None
 
 def process_image(img_path, calib_path, label_grid, out_folder, preview=False):
     M, grid_size, cell_px = load_calibration(calib_path)
@@ -231,9 +251,9 @@ def main():
                 if shift_name not in shift_patterns:
                     print(f"  [SKIP] ずらしパターン '{shift_name}' が定義にありません: {img_path.name}")
                     continue
-                calib_path = find_calib(calibs_folder, img_path.stem)
+                calib_path = find_calib(calibs_folder, img_path.stem, fallback_key=shift_name)
                 if calib_path is None:
-                    print(f"  [SKIP] calib なし: {img_path.stem}_calib.json")
+                    print(f"  [SKIP] calib なし: {img_path.stem}_calib.json / {shift_name}_calib.json")
                     continue
                 label_grid = shift_pattern_to_label_grid(shift_patterns[shift_name], shift_row)
                 n = process_image(img_path, calib_path, label_grid, out_folder, preview)
@@ -252,9 +272,9 @@ def main():
             if pkey not in patterns:
                 print(f"  [SKIP] {pkey} が定義にありません: {img_path.name}")
                 continue
-            calib_path = find_calib(calibs_folder, img_path.stem)
+            calib_path = find_calib(calibs_folder, img_path.stem, fallback_key=pkey)
             if calib_path is None:
-                print(f"  [SKIP] calib なし: {img_path.stem}_calib.json")
+                print(f"  [SKIP] calib なし: {img_path.stem}_calib.json / {pkey}_calib.json")
                 continue
 
             label_grid = pattern_to_label_grid(patterns[pkey])

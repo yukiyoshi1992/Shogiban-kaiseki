@@ -1,5 +1,0 @@
-data0：盤のみ
-data1：初期配置
-data2～data8　終盤局面
-data9～data18　中盤局面
-data19～data22　序盤局面

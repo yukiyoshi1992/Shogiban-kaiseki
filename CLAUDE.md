@@ -88,8 +88,25 @@ When a new entry is added to `placement_patterns.json` or `shift_patterns.json`,
 
 Before trusting a label_placement.py run on a newly-added pattern, scan for unrecognized symbols across every pattern (compare every symbol in `placement_patterns.json`/`shift_patterns.json` against `SYMBOL_TO_LABEL.keys()`) rather than relying on the `[WARNING]` lines in console output — console output on this Windows setup is cp932-encoded and can be cut off/garbled when captured through a redirected file or background task buffer, which makes it easy to miss a warning that occurred earlier in a long batch run.
 
+A third case (found 2026-06-18, visually): unlike a wrong/unrecognized symbol, a **wrong row count in a pattern definition produces no warning at all** — `label_placement.py` has no way to know the table's row layout doesn't match the photo. `pattern11` in `placement_patterns.json` had a spurious extra blank separator row (an editing mistake — the photo only has one blank row between the two `と` rows, not a blank row before *every* piece group like other patterns in the same batch), which silently shifted every row from there on by one: real 香/桂 cells got labeled `empty`, real 銀/金 cells got labeled 香/桂, real 王/角/飛 cells got labeled 銀/金, and real *empty* cells got labeled 王/角/飛 (`sente_ou`/`gote_ou`/etc.). This is only catchable by warping a sample photo with its calib, overlaying row/col indices (see the diagnostic technique below), and comparing row-by-row against the table — not by anything label_placement.py prints. When adding a new pattern, render one annotated/warped sample and manually diff it against the table before trusting any of its output, especially when patterns in the same batch don't all share the same blank-row convention.
+
+Diagnostic snippet for verifying a pattern/calib pair's row alignment (used to find the pattern11 bug):
+```python
+import cv2
+warped, cell_px, grid_size = warp_image(img, calib)  # or extract_cells() from label_placement.py
+for r in range(grid_size):
+    for c in range(grid_size):
+        cv2.putText(warped, f'{r},{c}', (c*cell_px+3, r*cell_px+15), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0,0,255), 1)
+# save and view warped, compare row-by-row against the pattern table
+```
+
 ### Calibration file convention
 Calibration JSONs (`*_calib.json`) hold a `perspective_matrix`, `grid_size` (9), and `cell_px` (100), and are looked up by exact image stem (`{image_stem}_calib.json`) first. `label_placement.py`'s `find_calib()` falls back to a shared pattern-name calib (e.g. `pattern10a_calib.json`) when no per-image calib exists — this supports the "one calibration shared across many photos of the same fixed-camera pattern" shooting style used for production-room data (see `train/src/本番部屋_calib/`). Calib folders are organized by data batch (`追加学習_calib/`, `本番部屋_calib/`, `対局v2_calib/`, `対局_calib/`) — don't assume a single calib applies globally.
+
+### label_from_kif.py: verified working (2026-06-18), with one data caveat
+`load_model()`/`predict_board()` previously used the wrong classifier head (`meta["classes"]` instead of `meta["labels"]`, a plain `Linear` layer instead of the `Dropout→Linear(256)→ReLU→Dropout→Linear` head, 96px resize instead of 224px) — it didn't match `train_model.py`/`predict_cell.py`'s actual architecture, so `state_dict` loading or inference would have silently produced garbage. Now fixed and matches `predict_cell.py` exactly. `shogi.KIF.Parser` (the primary path, not the fallback parser) verified working end-to-end against the old 対局2 data (72/72 frames matched the KIF, 0 diff every time) and 002 (112/112, diff 0–1). Single calib-per-folder is sufficient even when only some images in a folder have a same-stem calib file (old 対局2 data: 60/72 images had a dedicated calib; the other 12 still resolved fine using the one shared calib passed via `--calib`).
+
+001 (`学習データ（対局画像＋対局kif）3/001 ※001の画像を正しい方向に90度回転加工済のデータ/`) is the one exception: despite the folder name claiming the images are already rotated to the correct baseline orientation, they need an *additional* 180° rotation to align with `対局v2_calib/001_calib.json` (confirmed by warping move-0 with vs. without an extra 180° — diff 35 vs. diff 0). This looks like the calib was created with corners clicked in the opposite order/orientation than the images were saved in. A corrected copy was generated at `学習データ（対局画像＋対局kif）3/001_180fix/` (gitignored, like all of `train/data`) — use that folder, not the original, for any future 001 work. Even with the rotation fixed, only 3/79 frames pass the diff≤2 acceptance threshold for 001 — the rest are skipped because the old model's recognition accuracy is genuinely poor in that room/lighting (this is the known, already-documented reason a retrain was needed; it is not a bug in label_from_kif.py itself).
 
 ### Japanese-path / encoding handling
 - Image I/O must go through `cv2.imdecode(np.fromfile(path, dtype=np.uint8), ...)` / `cv2.imencode(...)[1].tofile(path)` instead of `cv2.imread`/`cv2.imwrite`, because the latter don't handle non-ASCII (Japanese) paths on Windows.

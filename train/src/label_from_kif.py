@@ -76,18 +76,26 @@ def warp_image(img, calib):
 
 
 def load_model(model_folder):
-    """既存モデルの読み込み（torchvision MobileNetV2）"""
+    """既存モデルの読み込み（train_model.pyと同じMobileNetV2構造。predict_cell.pyと揃える）"""
     import torch
+    import torch.nn as nn
     import torchvision.models as models
 
     model_folder = Path(model_folder)
     meta_path = model_folder / "model_meta.json"
     with open(meta_path, "r", encoding="utf-8") as f:
         meta = json.load(f)
-    classes = meta["classes"]
+    classes = meta["labels"]
 
     net = models.mobilenet_v2(weights=None)
-    net.classifier[1] = torch.nn.Linear(net.last_channel, len(classes))
+    in_features = net.classifier[1].in_features
+    net.classifier = nn.Sequential(
+        nn.Dropout(0.3),
+        nn.Linear(in_features, 256),
+        nn.ReLU(),
+        nn.Dropout(0.2),
+        nn.Linear(256, len(classes)),
+    )
     state = torch.load(model_folder / "best_model.pth", map_location="cpu")
     net.load_state_dict(state)
     net.eval()
@@ -98,9 +106,11 @@ def predict_board(model_tuple, warped, cell_px=100, grid_size=9):
     """切り出した9x9マスをモデルで認識してラベルグリッドを返す（簡易版・確信度なし）"""
     import torch
     from torchvision import transforms
+    from PIL import Image
 
     net, classes = model_tuple
     tfm = transforms.Compose([
+        transforms.Resize((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
@@ -110,8 +120,8 @@ def predict_board(model_tuple, warped, cell_px=100, grid_size=9):
         for c in range(grid_size):
             cell = warped[r*cell_px:(r+1)*cell_px, c*cell_px:(c+1)*cell_px]
             cell_rgb = cv2.cvtColor(cell, cv2.COLOR_BGR2RGB)
-            cell_resized = cv2.resize(cell_rgb, (96, 96))
-            tensor = tfm(cell_resized).unsqueeze(0)
+            pil_img = Image.fromarray(cell_rgb)
+            tensor = tfm(pil_img).unsqueeze(0)
             with torch.no_grad():
                 out = net(tensor)
                 pred = out.argmax(dim=1).item()

@@ -8,7 +8,7 @@ A tool that converts a sequence of smartphone photos (one photo per move of a sh
 
 All code lives under `train/src/`; the top-level `src/` and `.webaxs/` directories are empty/unused. There is no requirements.txt — dependencies observed in the code: `torch`, `torchvision`, `opencv-python` (`cv2`), `numpy`, `Pillow`, `python-shogi` (imported as `shogi`), `scikit-learn` (`train_model.py` only).
 
-For full project history, requirements, and in-progress work, see `doc/引き継ぎ資料.md` (Japanese handover doc) — it is the authoritative source of truth for project status and should be consulted/updated alongside this file.
+For full project history, requirements, and in-progress work, see `docs/引き継ぎ資料.md` (Japanese handover doc) — it is the authoritative source of truth for project status and should be consulted/updated alongside this file.
 
 ## Commands
 
@@ -63,7 +63,7 @@ There is no automated test suite; verification is done via `check_calibration.py
 - Training data orientation baseline: sente on the left, board shot landscape, sente pieces point right (▶), gote pieces point left (◀).
 
 ### The single most important invariant: rotate the image once, nothing else
-`detect_move.py` and `run_realtime.py` determine orientation from the blue-triangle marker, then **rotate the source image itself** to match the landscape/sente-left baseline before any other processing. Calibration is then computed (or re-applied) against that already-rotated image. Grid coordinates and calibration matrices are never themselves rotated/transformed — only the raw image is. (An earlier version of `detect_move.py` had a "triple rotation" bug — rotating the image, the calib coordinates, *and* the grid labels — which silently broke recognition. Do not reintroduce per-orientation coordinate or grid transforms; the fix is documented in `doc/引き継ぎ資料.md` §4-1.)
+`detect_move.py` and `run_realtime.py` determine orientation from the blue-triangle marker, then **rotate the source image itself** to match the landscape/sente-left baseline before any other processing. Calibration is then computed (or re-applied) against that already-rotated image. Grid coordinates and calibration matrices are never themselves rotated/transformed — only the raw image is. (An earlier version of `detect_move.py` had a "triple rotation" bug — rotating the image, the calib coordinates, *and* the grid labels — which silently broke recognition. Do not reintroduce per-orientation coordinate or grid transforms; the fix is documented in `docs/引き継ぎ資料.md` §4-1.)
 
 Blue-triangle apex direction → required rotation to reach the landscape baseline:
 | apex direction | board orientation | rotation applied |

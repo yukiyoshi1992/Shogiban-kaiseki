@@ -6,7 +6,7 @@ run_realtime.py の関数をそのまま import して再利用する（ロジ�
 run_realtime.py自体はCLI単体動作用として維持し、こちらは画面のみを担当する。
 
 起動方法:
-  streamlit run train/src/app_streamlit.py
+  streamlit run src/app_streamlit.py
 
 KIFファイル名の状態遷移（画面要件.xlsx準拠。コロンはWindowsのファイル名に使えないため
 仕様の "yyyyMMdd_hh:mm" を "yyyyMMdd_hh-mm" に変更している）:
@@ -29,10 +29,10 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import run_realtime as rr  # noqa: E402  (sys.path調整後にimportする必要があるため)
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 WATCH_DIR = REPO_ROOT / "runtime" / "input"
 OUT_DIR = REPO_ROOT / "runtime" / "result"
-MODEL_DIR = REPO_ROOT / "train" / "models"
+MODEL_DIR = REPO_ROOT / "src" / "models"
 POLL_INTERVAL_SEC = 5
 
 DIRECTION_LABELS = {

@@ -8,7 +8,7 @@
   python detect_move.py \
     --images "//YukiYoshiNAS/Shogiban-kaiseki-tool/train/data/対局/" \
     --calib  "//YukiYoshiNAS/Shogiban-kaiseki-tool/train/src/対局_calib/IMG_20260615_144922_calib.json" \
-    --model  "//YukiYoshiNAS/Shogiban-kaiseki-tool/train/models/" \
+    --model  "//YukiYoshiNAS/Shogiban-kaiseki-tool/src/models/" \
     --out    "//YukiYoshiNAS/Shogiban-kaiseki-tool/runtime/result/output.kif"
 """
 

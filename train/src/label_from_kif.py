@@ -19,7 +19,7 @@ KIFファイル + 対局画像フォルダから学習データ(cells)を自動�
     --kif    "//.../001.kif" \
     --images "//.../001/" \
     --calib  "//.../001_calib.json" \
-    --model  "//.../train/models/" \
+    --model  "//.../src/models/" \
     --out    "//.../train/data/cells/" \
     --pattern "IMG_"
 

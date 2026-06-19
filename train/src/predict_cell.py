@@ -7,20 +7,20 @@
 使い方:
   # 単一画像の推論（KIFなし）
   python predict_cell.py \
-    --model  "//YukiYoshiNAS/Shogiban-kaiseki-tool/train/models/" \
+    --model  "//YukiYoshiNAS/Shogiban-kaiseki-tool/src/models/" \
     --image  "//YukiYoshiNAS/Shogiban-kaiseki-tool/train/data/data2.jpg" \
     --calib  "//YukiYoshiNAS/Shogiban-kaiseki-tool/train/src/data2_calib.json"
 
   # KIFと照合して精度確認
   python predict_cell.py \
-    --model  "//YukiYoshiNAS/Shogiban-kaiseki-tool/train/models/" \
+    --model  "//YukiYoshiNAS/Shogiban-kaiseki-tool/src/models/" \
     --image  "//YukiYoshiNAS/Shogiban-kaiseki-tool/train/data/data2.jpg" \
     --calib  "//YukiYoshiNAS/Shogiban-kaiseki-tool/train/src/data2_calib.json" \
     --kif    "//YukiYoshiNAS/Shogiban-kaiseki-tool/train/data/data2.kif"
 
   # フォルダ内の全画像を一括検証
   python predict_cell.py \
-    --model   "//YukiYoshiNAS/Shogiban-kaiseki-tool/train/models/" \
+    --model   "//YukiYoshiNAS/Shogiban-kaiseki-tool/src/models/" \
     --images  "//YukiYoshiNAS/Shogiban-kaiseki-tool/train/data/" \
     --calibs  "//YukiYoshiNAS/Shogiban-kaiseki-tool/train/src/" \
     --pattern "data2"

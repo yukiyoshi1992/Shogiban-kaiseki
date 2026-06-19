@@ -13,7 +13,7 @@ detect_move.pyのclassify_frameは「直前の差分から1〜2手先まで合�
     --kif    "...001.kif" \
     --images "...001 ※画像が90度回転して入ってきている場合のパターン/" \
     --calib  "...001raw_calib.json" \
-    --model  "...train/models/" \
+    --model  "...src/models/" \
     --out-pkl "...audit_001raw.pkl"
 """
 

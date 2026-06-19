@@ -1,8 +1,29 @@
-# 作業引き継ぎ（2026-06-18〜19 セッション、2026-06-19続き×4）
+# 作業引き継ぎ（2026-06-18〜19 セッション、2026-06-19続き×5）
 
 このファイルは直近セッションの作業ログ。次回セッションは
 **`CLAUDE.md`（リポジトリ構造・コマンド・アーキテクチャ）と本ファイルを読めば続きから再開できる**ことを目的に作成。
 プロジェクトの企画・要件・設計の全体像は`CLAUDE.md`を参照（旧`docs/引き継ぎ資料.md`は2026-06-19に`docs/@old/`へ移動・非メンテナンス化）。
+
+## 2026-06-19 続きその5：フォルダ整理（UAT前段、`docs/chat.txt`の指示対応）
+
+ユーザーから「次にUATを実施する前にフォルダ整理をしたい」との依頼（`docs/chat.txt`）。本セッションは**フォルダ整理のみ**を実施し、UATは翌日別セッションで実施する方針（コードの挙動は一切変更していない）。詳細・理由はCLAUDE.mdの「Folder reorganization (2026-06-19)」節を参照。要点：
+
+1. **本番系コードを`src/`へ移動**：`train/src/app_streamlit.py` → `src/app_streamlit.py`、`train/src/run_realtime.py` → `src/run_realtime.py`。本番運用画面の実行pyが学習用ツール置き場（`train/`配下）にあるのは違和感があるとのユーザー指摘に対応。`run_realtime.py`は他スクリプトに依存しない自己完結ファイル、`app_streamlit.py`は同階層から`run_realtime.py`をimportする構造だったため、2ファイルを同じ新ディレクトリに移すだけで済み、ロジック変更は不要（`app_streamlit.py`内の`REPO_ROOT`相対階層・`MODEL_DIR`・docstringのパス例のみ修正）。
+2. **`train/models/` → `src/models/`へ移動**：本番コードが実際に読み込む場所なので本番側に置くべき、というユーザー指摘に対応。今後の再学習はここを出力先とする（`train_model.py`等のdocstring例も更新済み）。
+3. **`train/test_runs/` → `train/data/test_runs/`へ移動**：「`train/data/cells`と`train/test_runs`の階層がばらばらで気持ち悪い」というユーザー指摘に対応。両方とも本番非依存・gitignore対象の生成データという同じ性質なので、`train/data/`配下に揃えて深さを統一した。`.gitignore`の重複行（`train/test_runs`）も削除。
+4. **意図的に対象外としたもの**：`train/src/`配下の学習・ラベリング・診断系スクリプト本体とキャリブレーションデータフォルダ、`train/data/学習用の撮影データ/`以下の生データのフォルダ名・構成。今回のご指摘の対象外と判断し変更していない。
+5. **副産物**：移動作業中、前回セッションで起動されたままの`streamlit run train/src/app_streamlit.py`プロセス（旧パスを参照していた、サーバ起動から放置されていたもの）が`train/test_runs/`内のファイルをロックしていて移動をブロックしていた。ユーザーに確認のうえ停止してから移動を完了させた。次回セッション開始時、Streamlit画面を使う場合は新たに`streamlit run src/app_streamlit.py`で起動し直すこと。
+6. **検証**：`py_compile`と`streamlit.testing.v1.AppTest.from_file("src/app_streamlit.py").run()`のヘッドレススモークテストで、移動後も例外なく動作することを確認済み。ブラウザでの実機確認はまだ（次回UATで実施）。
+7. **未解決の別件（今回のスコープ外、次回確認推奨）**：`.claude/hooks/`フォルダ自体がディスク上から消えており（`discord_notify.py`が存在しない）、Discord通知用のStopフックが動作していない状態を確認した。原因未調査。次回セッションで`git status`を確認し、復元（`git checkout`等）が必要か検討すること。
+
+### 次回やること（優先順、本セッション終了時点で更新）
+
+フォルダ整理が完了。次回の優先順位は変わらず：
+
+1. **【最優先】StreamlitアプリのUAT（実機確認）** — `streamlit run src/app_streamlit.py`で起動し、`runtime/input`→`runtime/result`に対して4ボタン+メッセージwindow・手動キャリブレーションUIを実際にクリックして検証する。
+2. （任意・余裕があれば）`classify_frame`の採用判定厳密化（CLAUDE.md「New held-out test data evaluation」節参照）。
+3. （任意・低優先度、ユーザーより「リソースが余っていればやる程度」と確認済み）次PJ（Androidアプリ化、`docs/99 次回PJ/`に要件あり）への引継ぎ情報整理。
+4. `.claude/hooks/`欠落の確認・復元（上記7番）。
 
 ## 2026-06-19 続きその4：Streamlit画面実装開始＋Discordをwebhook→ボットに切替
 

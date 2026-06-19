@@ -14,9 +14,9 @@
 - 対局終了（一定時間 新規画像なし or 手動終了）でKIF確定出力
 
 使い方:
-  python run_realtime.py \
+  python src/run_realtime.py \
     --watch  "//YukiYoshiNAS/Shogiban-kaiseki-tool/runtime/input/" \
-    --model  "//YukiYoshiNAS/Shogiban-kaiseki-tool/train/models/" \
+    --model  "//YukiYoshiNAS/Shogiban-kaiseki-tool/src/models/" \
     --out    "//YukiYoshiNAS/Shogiban-kaiseki-tool/runtime/result/" \
     --idle-timeout 600
 

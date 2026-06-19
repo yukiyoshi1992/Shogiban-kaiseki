@@ -2,12 +2,12 @@
 駒認識モデル学習スクリプト
 - MobileNetV2の転移学習で駒種+先後を分類
 - cells/フォルダのラベル別画像を学習データとして使用
-- 学習済みモデルをtrain/models/に保存
+- 学習済みモデルをsrc/models/に保存（本番側が読む場所がそのまま正解の置き場所になる）
 
 使い方:
   python train_model.py \
     --cells "//YukiYoshiNAS/Shogiban-kaiseki-tool/train/data/cells/" \
-    --out   "//YukiYoshiNAS/Shogiban-kaiseki-tool/train/models/"
+    --out   "//YukiYoshiNAS/Shogiban-kaiseki-tool/src/models/"
 
 オプション:
   --epochs 20    学習エポック数（デフォルト20）

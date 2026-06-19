@@ -6,7 +6,7 @@
 
 ## 2026-06-19 続きその4：Streamlit画面実装開始＋Discordをwebhook→ボットに切替
 
-### 1. Streamlit画面実装（進行中）
+### 1. Streamlit画面実装（骨格〜エラー中止まで実装完了、UATは次回）
 `docs/01 要件定義/画面要件.xlsx`の確定仕様に基づき、`train/src/app_streamlit.py`を新規作成。設計判断・実装詳細はCLAUDE.mdの「Streamlit operator screen」節を参照。要点：
 - `run_realtime.py`を`import`して判定ロジック（向き判定・赤丸キャリブレーション・classify_frame・KIF出力など）を再利用する方式を採用（ユーザー承認済み、ロジックの三重管理を避けるため）。
 - 4ボタン（対局準備/対局開始/対局終了/対局中止）+メッセージwindowを実装。
@@ -15,6 +15,21 @@
 - 画面要件No.6（認識エラー時の自動中止）も実装済み：classify_frameが"error"を返した時点で即座に【対局エラー中止】にリネームして対局を終了する。
 - **検証状況**：ブラウザでのUI実機テストはまだ未実施（次回ユーザーと一緒にUATを行う予定）。`streamlit.testing.v1.AppTest`を使ったヘッドレスのコード経路スモークテストは実施済み：対局準備（実際にruntime/input内の既存画像で自動チェック失敗→manual_calibへの遷移を確認）、手動キャリブレーションの向き選択→四隅クリック画面遷移、対局開始（KIF即時作成・既存ファイルのベースライン取得を確認）、監視中の1サイクル（認識→classify_frame→自動中止→ファイルリネームを確認）、対局終了/対局中止ボタン、いずれも例外なし。スモークテストで使った一時ファイルは`runtime/`から削除済み（`runtime/`は本番専用ルールを維持）。
 - **未実施**：実際のブラウザでの動作確認（UAT）。優先度2,3の任意項目（classify_frame厳密化、向き判定への駒位置併用）。
+- ユーザーが`python -m streamlit run train/src/app_streamlit.py --server.headless true`で実際に起動し、エラーなく立ち上がることを確認済み（コマンドは`画面実行コマンド.txt`としてリポジトリルートに保存・git管理対象）。**これは起動確認のみで、4ボタンを実際にクリックして一連の流れを確認するUATは次回（明日以降）実施予定。**
+
+### 3. Discord「Channels」機能の調査（次回検討事項）
+ユーザーから「Discordとの連携（双方向）を進めたい」との要望があり、claude-code-guideエージェントに調査を依頼した。結果：
+- Claude Code公式の**Channels機能**（研究プレビュー）がDiscord/Telegram/iMessageに対応しており、Discord側から送ったメッセージをClaude Codeが受け取って応答する**双方向連携**が可能。
+- 設定はすべてユーザー自身の操作が必要（Claude Codeのエージェントからは実行不可）：
+  1. Discord Developer PortalでBot作成、Message Content Intent有効化
+  2. Claude Code内で `/plugin install discord@claude-plugins-official` → `/reload-plugins`
+  3. `/discord:configure <ボットトークン>`
+  4. `claude --channels plugin:discord@claude-plugins-official` で再起動
+  5. Discordでボットへ自分からDMを送り、返ってきたペアリングコードで `/discord:access pair <コード>`
+  6. アクセス制限のため `/discord:access policy allowlist` を設定推奨（誰でもメッセージを送れる状態は危険）
+- Team/Enterprise契約の場合は管理者がclaude.ai側でChannelsを有効化する必要がある場合がある。
+- **既存の一方向Stopフック（webhook→ボット切替済み、`.claude/hooks/discord_notify.py`）とは別の仕組み**。Channelsが使えるようになったら、通知が重複する可能性があるので一方向フックの扱い（残すか無効化するか）を次回検討すること。
+- 次回セッション開始時、ユーザーがこの設定を進めているかどうか確認すること。
 
 ### 2. Discord通知をwebhookからボットへ切替
 ユーザーの方針転換により、Discord通知の送信方式をwebhookから実際のDiscordボットに変更。

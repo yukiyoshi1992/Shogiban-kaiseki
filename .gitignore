@@ -1,4 +1,5 @@
 train/data
+train/test_runs
 runtime/
 __pycache__/
 *.pyc

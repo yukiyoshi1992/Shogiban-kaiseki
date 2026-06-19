@@ -1,1 +1,2 @@
+cd \\YukiYoshiNAS\Shogiban-kaiseki-tool
 claude --dangerously-skip-permissions

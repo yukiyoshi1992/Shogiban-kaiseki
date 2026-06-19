@@ -1,9 +1,16 @@
 """
 本番運用スクリプト: ファイル監視 → リアルタイムKIF生成
-- ファイルサーバーの監視フォルダに新しい画像が入るたびに処理
-- 0手目でキャリブレーション（赤丸）と向き判定（青三角）を確定
-- 0手目の認識結果を初期配置と自動照合し、人間が確認してから対局開始
-- 各手を差分検出してKIFを逐次更新
+
+0手目（対局準備）の処理フロー（2026-06-19 chat.txtでの指示に基づく確定版）:
+  1. 青三角で向き判定 → エラー(検出不可)なら3へ
+  2. 赤丸でキャリブレーション → エラー(4個検出できない)なら3へ
+  3. 認識結果を将棋の初期配置と照合 → 不一致なら3へ
+     (上記いずれかでエラーが出た場合): 人間が盤の向き指定+四隅クリックで
+     キャリブレーションし、その結果を無条件に採用して次へ進む。
+     「赤丸が見える状態で撮り直してください」のような自動リトライループは行わない
+     —— エラーが出たら即座に人間が直す、それだけ。
+  4. 準備OK表示 → 対局開始（Enterで進む。画面UI実装時は対局開始ボタンに相当）
+- 各手は直前の差分ではなく確定済みboardと比較し、合法手を総当たりで探して判定（classify_frame）
 - 対局終了（一定時間 新規画像なし or 手動終了）でKIF確定出力
 
 使い方:
@@ -245,6 +252,78 @@ def save_grid_overlay(img, M, out_path, grid_size=9, cell_px=100):
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     cv2.imencode(".png", vis)[1].tofile(str(out_path))
 
+def manual_calibration_flow(img, out_dir):
+    """
+    0手目の自動判定（向き判定／赤丸キャリブレーション／初期配置照合）のいずれかで
+    エラーになった場合に、人間が盤の向きを指定し、四隅をクリックしてキャリブレーションする。
+    この経路に入ったら撮り直しは要求せず、確定した結果をそのまま採用して⑥準備OKへ進む
+    （自動検出に依存しない確実な救済手段として、calibrate.pyと同じ4隅クリック方式を
+    本スクリプトに内包する）。
+    Returns: (direction, M) 確定した画像回転方向と透視変換行列
+    """
+    print(f"\n  盤の向きを指定してください（画像回転方向）:")
+    print(f"   [1] right  横向き・先手が左（回転なし）")
+    print(f"   [2] left   横向き・先手が右（180度回転）")
+    print(f"   [3] up     縦向き・先手が下（反時計90度）")
+    print(f"   [4] down   縦向き・先手が上（時計90度）")
+    dir_map = {"1": "right", "2": "left", "3": "up", "4": "down"}
+    direction = None
+    while direction is None:
+        ori_input = input("  入力 [1-4]: ").strip()
+        direction = dir_map.get(ori_input)
+        if direction is None:
+            print("  [WARNING] 1〜4で入力してください")
+
+    img_rotated = rotate_image_for_direction(img, direction)
+
+    h, w = img_rotated.shape[:2]
+    max_disp = 1200
+    scale = min(max_disp / w, max_disp / h, 1.0)
+    disp_w, disp_h = int(w * scale), int(h * scale)
+    base_disp = cv2.resize(img_rotated, (disp_w, disp_h))
+    display_img = base_disp.copy()
+    clicked_points = []
+
+    def _mouse_cb(event, x, y, flags, param):
+        if event == cv2.EVENT_LBUTTONDOWN and len(clicked_points) < 4:
+            clicked_points.append((x, y))
+            cv2.circle(display_img, (x, y), 8, (0, 0, 255), -1)
+            cv2.putText(display_img, str(len(clicked_points)), (x+10, y-10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+            cv2.imshow("Manual Calibration", display_img)
+            print(f"  点{len(clicked_points)}: ({x},{y})")
+
+    print(f"\n  画像ウィンドウが開きます。盤面の4隅を以下の順でクリックしてください：")
+    print(f"   1: 左上  2: 右上  3: 右下  4: 左下（盤の外枠ではなく、マス目=赤丸の角）")
+    print(f"   q: やり直し  Enter: 確定")
+    cv2.namedWindow("Manual Calibration", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("Manual Calibration", disp_w, disp_h)
+    cv2.setMouseCallback("Manual Calibration", _mouse_cb)
+    cv2.imshow("Manual Calibration", display_img)
+
+    while True:
+        key = cv2.waitKey(20) & 0xFF
+        if key == ord('q'):
+            clicked_points.clear()
+            display_img[:] = base_disp
+            cv2.imshow("Manual Calibration", display_img)
+            print("  [リセット] もう一度4隅をクリックしてください")
+        elif key == 13:  # Enter
+            if len(clicked_points) == 4:
+                break
+            print(f"  [WARNING] まだ{len(clicked_points)}点しか選択されていません（4点必要）")
+    cv2.destroyAllWindows()
+
+    src_points_orig = [(x/scale, y/scale) for (x, y) in clicked_points]
+    ordered = order_points(src_points_orig)
+    M = compute_calib(ordered)
+
+    overlay_path = out_dir / "calib_check_manual.png"
+    save_grid_overlay(img_rotated, M, overlay_path)
+    print(f"\n  手動キャリブレーション完了。確認画像: {overlay_path}")
+
+    return direction, M
+
 # ===== グリッド変換 =====
 def rot180(g): return [[g[8-r][8-c] for c in range(9)] for r in range(9)]
 def rot90cw(g): return [[g[8-c][r] for c in range(9)] for r in range(9)]
@@ -434,7 +513,6 @@ def main():
     processed=set()
     calib_M=None
     img_direction_confirmed="right"  # 確定した画像回転方向（デフォルト横向き）
-    transforms_list=[lambda g:g]
     board=shogi.Board()
     moves_usi=[]
     last_new=time.time()
@@ -457,110 +535,70 @@ def main():
                     print(f"  [SKIP] 読込失敗: {img_path.name}")
                     processed.add(img_path.name); continue
 
-                # 0手目: 向き判定→画像回転→キャリブレーション→人間確認
+                # 0手目（対局準備）: 向き判定→赤丸キャリブレーション→初期配置照合を自動で試す。
+                # いずれかでエラーが出たら、その場で人間が向き指定+四隅クリックを行い、
+                # 結果を無条件に採用して準備OKへ進む（「撮り直してください」という自動リトライ
+                # ループは行わない方針 — エラーになったら即・人間が直す、の一回のみ）。
                 if calib_M is None:
-                    # Step1: 青三角で向き判定
+                    error_reason = None
+                    img_direction = None
+                    img_rotated = None
+                    cand_M = None
+
+                    # Step3: 青三角で向き判定
                     tri = detect_triangle_direction(img)
                     if tri:
                         img_direction = tri
-                        print(f"  向き: 青三角頂点={tri}")
+                        print(f"  向き判定: 青三角頂点={tri}")
                     else:
-                        img_direction = "right"  # デフォルト（横向き）
-                        print(f"  [WARNING] 青三角検出できず -> 横向き(right)扱い")
+                        error_reason = "向き判定エラー（青三角を検出できませんでした）"
 
-                    # Step2: 画像を回転（縦向き対応）
-                    img_rotated = rotate_image_for_direction(img, img_direction)
-                    rot_desc = {
-                        "right": "回転なし",
-                        "left":  "180度回転",
-                        "up":    "反時計90度回転（先手が下→左へ）",
-                        "down":  "時計90度回転（先手が上→左へ）",
-                    }.get(img_direction, "回転なし")
-                    print(f"  画像回転: {rot_desc}")
+                    # Step4: 赤丸でキャリブレーション
+                    if error_reason is None:
+                        img_rotated = rotate_image_for_direction(img, img_direction)
+                        rot_desc = {
+                            "right": "回転なし",
+                            "left":  "180度回転",
+                            "up":    "反時計90度回転（先手が下→左へ）",
+                            "down":  "時計90度回転（先手が上→左へ）",
+                        }.get(img_direction, "回転なし")
+                        print(f"  画像回転: {rot_desc}")
 
-                    # Step3: 回転後画像でキャリブレーション
-                    cand_M = calibrate_from_image(img_rotated)
-                    if cand_M is None:
-                        print(f"  [待機] キャリブレーション失敗（赤丸4個検出できず）")
-                        print(f"         赤丸が見える状態で初期局面を撮り直してください。")
-                        processed.add(img_path.name)
-                        time.sleep(args.poll_interval); continue
+                        cand_M = calibrate_from_image(img_rotated)
+                        if cand_M is None:
+                            error_reason = "キャリブレーションエラー（赤丸4個を検出できませんでした）"
 
-                    # Step4: グリッド重ね画像を保存（人間の目視用）
-                    overlay_path = out / "calib_check.png"
-                    save_grid_overlay(img_rotated, cand_M, overlay_path)
-                    print(f"\n  キャリブレーション結果を保存しました:")
-                    print(f"    {overlay_path}")
-                    print(f"  -> この画像を開いて、緑のグリッドが盤面のマスと")
-                    print(f"     正しく重なっているか確認してください。")
+                    # Step5: 初期配置と照合
+                    if error_reason is None:
+                        overlay_path = out / "calib_check.png"
+                        save_grid_overlay(img_rotated, cand_M, overlay_path)
+                        print(f"  キャリブレーション確認画像: {overlay_path}")
 
-                    # Step5: 回転後画像で盤面認識→初期配置と照合
-                    warped = cv2.warpPerspective(img_rotated, cand_M, (900,900))
-                    labels = predict_board(model, warped)
-                    mismatches = print_board_compare(labels, INITIAL_BOARD_STD)
+                        warped = cv2.warpPerspective(img_rotated, cand_M, (900,900))
+                        labels = predict_board(model, warped)
+                        mismatches = print_board_compare(labels, INITIAL_BOARD_STD)
+                        if mismatches:
+                            print(f"\n  [!] 初期配置と異なるマスが {len(mismatches)} 箇所あります:")
+                            for r, c, expected, got in mismatches:
+                                print(f"      行{r}列{c}: 期待={expected} / 認識={got}")
+                            error_reason = "初期配置照合エラー（認識結果が将棋の初期配置と一致しませんでした）"
 
-                    if mismatches:
-                        print(f"\n  [!] 初期配置と異なるマスが {len(mismatches)} 箇所あります:")
-                        for r, c, expected, got in mismatches:
-                            print(f"      行{r}列{c}: 期待={expected} / 認識={got}")
-                        print(f"\n  考えられる原因:")
-                        print(f"   ・キャリブレーションのズレ（グリッドが合っていない）")
-                        print(f"   ・駒認識の誤り")
-                        print(f"   ・向き判定の誤り（青三角が正しく検出されなかった）")
+                    if error_reason is not None:
+                        print(f"\n  [エラー] {error_reason}")
+                        print(f"  -> 人間が盤の向き指定と四隅キャリブレーションを行います。")
+                        img_direction, cand_M = manual_calibration_flow(img, out)
                     else:
-                        print(f"\n  [OK] 認識結果は初期配置と完全に一致しました。")
+                        print(f"\n  [OK] 自動判定すべて成功（向き判定・赤丸キャリブレーション・初期配置照合）。")
 
-                    # Step6: 人間の確認待ち
-                    print(f"\n{'='*55}")
-                    print(f"  キャリブレーション画像と上の盤面を確認してください。")
-                    print(f"   [y] OK、対局開始")
-                    print(f"   [n] NG、撮り直し待ち")
-                    print(f"   [r] 向きを手動指定して再試行")
-                    print(f"{'='*55}")
-                    ans = input("  入力 [y/n/r]: ").strip().lower()
-
-                    if ans == "r":
-                        print(f"\n  向きを手動指定してください（画像回転方向）:")
-                        print(f"   [1] right  横向き・先手が左（回転なし）")
-                        print(f"   [2] left   横向き・先手が右（180度回転）")
-                        print(f"   [3] up     縦向き・先手が下（反時計90度）")
-                        print(f"   [4] down   縦向き・先手が上（時計90度）")
-                        ori_input = input("  入力 [1-4]: ").strip()
-                        dir_map = {"1": "right", "2": "left", "3": "up", "4": "down"}
-                        if ori_input in dir_map:
-                            img_direction = dir_map[ori_input]
-                            img_rotated = rotate_image_for_direction(img, img_direction)
-                            cand_M = calibrate_from_image(img_rotated)
-                            if cand_M is None:
-                                print(f"  キャリブレーション失敗。撮り直しに戻ります。")
-                                ans = "n"
-                            else:
-                                warped = cv2.warpPerspective(img_rotated, cand_M, (900,900))
-                                labels = predict_board(model, warped)
-                                mismatches = print_board_compare(labels, INITIAL_BOARD_STD)
-                                if mismatches:
-                                    print(f"\n  [!] まだ {len(mismatches)} 箇所不一致。続けますか？")
-                                else:
-                                    print(f"\n  [OK] 初期配置と一致しました。")
-                                ans2 = input("  この向きで対局開始しますか？ [y/n]: ").strip().lower()
-                                ans = "y" if ans2 == "y" else "n"
-                        else:
-                            print(f"  無効な入力。撮り直しに戻ります。")
-                            ans = "n"
-
-                    if ans != "y":
-                        print(f"  -> 0手目をやり直します。正しい初期局面を撮り直してください。")
-                        processed.add(img_path.name)
-                        calib_M = None
-                        last_new = time.time()
-                        continue
-
-                    # 確定（gridsのtransformsはnormal固定：画像回転で吸収済み）
+                    # Step6: 準備OK（自動成功でも手動キャリブレーションでも、ここで無条件に確定する）
                     calib_M = cand_M
-                    img_direction_confirmed = img_direction  # 確定した回転方向を保存
-                    transforms_list = [lambda g: g]  # 画像回転済みなのでグリッド変換不要
+                    img_direction_confirmed = img_direction
                     processed.add(img_path.name)
-                    print(f"\n  [対局開始] キャリブレーション確定。以降の手を記録します。\n")
+                    print(f"\n{'='*55}")
+                    print(f"  [準備OK] 初期局面の準備が整いました。")
+                    print(f"{'='*55}")
+                    input("  対局を開始する準備ができたらEnterを押してください（対局開始ボタンの代わり）: ")
+                    print(f"\n  [対局開始] 以降の手を記録します。\n")
                     continue
 
                 # 各手: 画像を同じ方向に回転してから認識し、boardと比較して指し手を判定

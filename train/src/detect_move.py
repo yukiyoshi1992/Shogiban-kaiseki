@@ -611,12 +611,15 @@ def moves_to_kif(moves_usi, out_path):
             else:
                 src_sq   = move.from_square
                 src_name = shogi.SQUARE_NAMES[src_sq]
-                src_ja   = sq_name_to_ja(src_name)
+                # KIFの移動元表記は半角数字2桁（筋+段）。例: "27" = 2筋7段。
+                # sq_name_to_ja()は全角筋+漢数字段を返すので使わず、USI名から直接数字を作る。
+                file_map = {'a':1,'b':2,'c':3,'d':4,'e':5,'f':6,'g':7,'h':8,'i':9}
+                src_ascii = f"{int(src_name[0])}{file_map.get(src_name[1], 0)}"
                 piece    = board.piece_at(src_sq)
                 piece_sym = shogi.PIECE_SYMBOLS[piece.piece_type] if piece else '?'
                 piece_ja  = PIECE_JA.get(piece_sym, '?')
                 promoted_str = "成" if move.promotion else ""
-                move_ja   = f"{dst_ja}{piece_ja}{promoted_str}({src_ja[0]}{['','一','二','三','四','五','六','七','八','九'].index(src_ja[1]) if src_ja[1] in ['一','二','三','四','五','六','七','八','九'] else '?'})"
+                move_ja   = f"{dst_ja}{piece_ja}{promoted_str}({src_ascii})"
 
             lines.append(f"{move_num:4d} {move_ja} (00:00/00:00:00)")
             board.push(move)

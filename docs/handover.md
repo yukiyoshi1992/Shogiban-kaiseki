@@ -14,7 +14,8 @@
 4. **意図的に対象外としたもの**：`train/src/`配下の学習・ラベリング・診断系スクリプト本体とキャリブレーションデータフォルダ、`train/data/学習用の撮影データ/`以下の生データのフォルダ名・構成。今回のご指摘の対象外と判断し変更していない。
 5. **副産物**：移動作業中、前回セッションで起動されたままの`streamlit run train/src/app_streamlit.py`プロセス（旧パスを参照していた、サーバ起動から放置されていたもの）が`train/test_runs/`内のファイルをロックしていて移動をブロックしていた。ユーザーに確認のうえ停止してから移動を完了させた。次回セッション開始時、Streamlit画面を使う場合は新たに`streamlit run src/app_streamlit.py`で起動し直すこと。
 6. **検証**：`py_compile`と`streamlit.testing.v1.AppTest.from_file("src/app_streamlit.py").run()`のヘッドレススモークテストで、移動後も例外なく動作することを確認済み。ブラウザでの実機確認はまだ（次回UATで実施）。
-7. **未解決の別件（今回のスコープ外、次回確認推奨）**：`.claude/hooks/`フォルダ自体がディスク上から消えており（`discord_notify.py`が存在しない）、Discord通知用のStopフックが動作していない状態を確認した。原因未調査。次回セッションで`git status`を確認し、復元（`git checkout`等）が必要か検討すること。
+7. **副産物（解決済み）**：作業中、`.claude/hooks/`フォルダがディスク上から消えていて（`discord_notify.py`が存在しない）、`.claude/settings.local.json`も空（`{}`、Stopフック登録・`DISCORD_CHANNEL_ID`設定が消えた状態）になっているのを発見。`discord_notify.py`自体はgit追跡対象なので`git checkout --`で復元済み（コミットは不要、HEADと一致するだけ）。ただし`settings.local.json`は元々gitignore対象のため復元手段がなく、空のままにした。Discordでユーザー本人に確認したところ、**現在動作中の双方向「Channels」連携（`claude --channels plugin:discord@claude-plugins-official`、`docs/claude code/claude code 定常指示.txt`参照）に切り替えた際、旧来の一方向Stopフック方式を意図的に無効化したと思われる**とのことで、**再設定はせず現状維持**で確定。今後この一方向フックを復活させる場合は、Discord Developer Portalでチャンネルidとボットトークン（`docs/discord_token.txt`）を再設定する必要がある。
+8. **Discordでの追加要望（未着手・要相談）**：ユーザーから「AskUserQuestion（選択肢確認）のようにPC画面側の対応が必要なタイミングで、Discordに『PCを見てください』と通知するルールを作れないか」という要望が出た。実現には`.claude/settings.local.json`へのhooks追加が必要（おそらく`Notification`フック等の調査が必要）。次回セッションでの検討事項として記録。
 
 ### 次回やること（優先順、本セッション終了時点で更新）
 
@@ -23,7 +24,7 @@
 1. **【最優先】StreamlitアプリのUAT（実機確認）** — `streamlit run src/app_streamlit.py`で起動し、`runtime/input`→`runtime/result`に対して4ボタン+メッセージwindow・手動キャリブレーションUIを実際にクリックして検証する。
 2. （任意・余裕があれば）`classify_frame`の採用判定厳密化（CLAUDE.md「New held-out test data evaluation」節参照）。
 3. （任意・低優先度、ユーザーより「リソースが余っていればやる程度」と確認済み）次PJ（Androidアプリ化、`docs/99 次回PJ/`に要件あり）への引継ぎ情報整理。
-4. `.claude/hooks/`欠落の確認・復元（上記7番）。
+4. （要相談）Discord「PCを見てください」通知ルールの検討（上記8番）。
 
 ## 2026-06-19 続きその4：Streamlit画面実装開始＋Discordをwebhook→ボットに切替
 

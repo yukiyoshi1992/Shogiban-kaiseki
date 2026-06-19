@@ -54,9 +54,11 @@ LABEL_TO_PIECE = {
     "tokin":shogi.PROM_PAWN,"nari_kyo":shogi.PROM_LANCE,"nari_kei":shogi.PROM_KNIGHT,
     "nari_gin":shogi.PROM_SILVER,"uma":shogi.PROM_BISHOP,"ryu":shogi.PROM_ROOK,
 }
-PROMOTED_TO_BASE = {
-    "tokin":"fu","nari_kyo":"kyo","nari_kei":"kei","nari_gin":"gin","uma":"kaku","ryu":"hi",
-}
+# shogi駒情報 → ラベル名（LABEL_TO_PIECEの逆引き）
+PIECE_TO_LABEL = {v: k for k, v in LABEL_TO_PIECE.items()}
+
+# classify_frame()のしきい値（暫定値。新テストデータでの検証結果次第で調整する）
+MOVE_DIFF_THRESHOLD = 2  # この差分数以下なら「この合法手(列)が起きた」と認める
 
 # ===== モデル =====
 def load_model(model_folder):
@@ -281,58 +283,100 @@ def apply_transforms(g, tl):
 # ===== 座標・差分・指し手 =====
 def rc_to_square(row,col): return (8-col)*9+row
 
-def label_to_piece(label):
-    if label=="empty": return None,None
-    if label.startswith("sente_"): return LABEL_TO_PIECE.get(label[6:]), shogi.BLACK
-    return LABEL_TO_PIECE.get(label[5:]), shogi.WHITE
+def square_to_rc(sq):
+    col = 8 - (sq // 9)
+    row = sq % 9
+    return row, col
 
-def detect_changes(prev,curr):
-    src=[];dst=[]
+def board_to_label_grid(board):
+    """shogi.Boardを9x9ラベルグリッドに変換する（detect_move.pyの同名関数と同じロジック）"""
+    grid = [["empty"] * 9 for _ in range(9)]
+    for sq in shogi.SQUARES:
+        piece = board.piece_at(sq)
+        if piece is None:
+            continue
+        row, col = square_to_rc(sq)
+        piece_name = PIECE_TO_LABEL.get(piece.piece_type)
+        if piece_name is None:
+            continue
+        color_prefix = "sente" if piece.color == shogi.BLACK else "gote"
+        grid[row][col] = f"{color_prefix}_{piece_name}"
+    return grid
+
+def diff_count(grid_a, grid_b):
+    n = 0
     for r in range(9):
         for c in range(9):
-            p,cu=prev[r][c],curr[r][c]
-            if p==cu: continue
-            if p!="empty" and cu=="empty": src.append((r,c,p))
-            elif p=="empty" and cu!="empty": dst.append((r,c,cu))
-            else:
-                pcol="sente" if p.startswith("sente_") else "gote"
-                ccol="sente" if cu.startswith("sente_") else "gote"
-                if pcol!=ccol: dst.append((r,c,cu))
-                else: src.append((r,c,p)); dst.append((r,c,cu))
-    return src,dst
+            if grid_a[r][c] != grid_b[r][c]:
+                n += 1
+    return n
 
-def infer_move(src,dst):
-    cands=[]
-    def add(s,d,sl,dl):
-        ss,dd=rc_to_square(*s[:2]),rc_to_square(*d[:2])
-        sp,_=label_to_piece(sl); 
-        if not sp: return
-        sn,dn=sl.split("_",1)[1],dl.split("_",1)[1]
-        promoted=(dn in PROMOTED_TO_BASE and PROMOTED_TO_BASE[dn]==sn)
-        usi=f"{shogi.SQUARE_NAMES[ss]}{shogi.SQUARE_NAMES[dd]}"
-        if promoted: cands.append(usi+"+")
-        else:
-            cands.append(usi)
-            if sp in [shogi.PAWN,shogi.LANCE,shogi.KNIGHT,shogi.SILVER,shogi.BISHOP,shogi.ROOK]:
-                cands.append(usi+"+")
-    if len(src)==1 and len(dst)==1:
-        add(src[0],dst[0],src[0][2],dst[0][2])
-    elif len(src)==0 and len(dst)==1:
-        dn=dst[0][2].split("_",1)[1]; pt=LABEL_TO_PIECE.get(dn)
-        if pt:
-            cands.append(f"{shogi.PIECE_SYMBOLS[pt].upper()}*{shogi.SQUARE_NAMES[rc_to_square(*dst[0][:2])]}")
-    elif len(src)>=1 and len(dst)>=1:
-        for s in src:
-            for d in dst:
-                sc=label_to_piece(s[2])[1]; dc=label_to_piece(d[2])[1]
-                if sc==dc and sc is not None: add(s,d,s[2],d[2])
-    return cands
+def _best_legal_sequences(board, recognized, depth):
+    """boardからdepth手先まですべての合法手列を試し、recognizedとの差分が最小の手列を返す。
+    Returns: (best_diff, [手列(shogi.Moveのリスト), ...])  手列はdepth個のMoveを含む。
+    """
+    if depth == 1:
+        best_diff = None
+        best_seqs = []
+        for m1 in board.legal_moves:
+            b1 = shogi.Board()
+            b1.set_sfen(board.sfen())
+            b1.push(m1)
+            d = diff_count(board_to_label_grid(b1), recognized)
+            if best_diff is None or d < best_diff:
+                best_diff, best_seqs = d, [[m1]]
+            elif d == best_diff:
+                best_seqs.append([m1])
+        return best_diff, best_seqs
 
-def find_legal(cands, board):
-    legal=[m.usi() for m in board.legal_moves]
-    for c in cands:
-        if c in legal: return c
-    return None
+    # depth == 2
+    best_diff = None
+    best_seqs = []
+    for m1 in board.legal_moves:
+        b1 = shogi.Board()
+        b1.set_sfen(board.sfen())
+        b1.push(m1)
+        for m2 in b1.legal_moves:
+            b2 = shogi.Board()
+            b2.set_sfen(b1.sfen())
+            b2.push(m2)
+            d = diff_count(board_to_label_grid(b2), recognized)
+            if best_diff is None or d < best_diff:
+                best_diff, best_seqs = d, [[m1, m2]]
+            elif d == best_diff:
+                best_seqs.append([m1, m2])
+    return best_diff, best_seqs
+
+def classify_frame(board, recognized, move_threshold=MOVE_DIFF_THRESHOLD):
+    """
+    直前の写真ではなく、現在確定しているboardと今回の認識結果を比較し、
+    それを説明できる合法手を合法手全体から総当たりで探す（detect_move.pyと同じロジック）。
+    「指し手ではない見え方の変化」と「誤読された本当の指し手」は差分の大きさだけでは区別
+    できないため、diff0が小さいことを理由に指し手なしと断定することはしない（=安全側に倒し、
+    写真がboardと完全一致(diff0==0)の場合のみ指し手なしとする）。1手で説明できなければ、
+    直前のフレームが認識ミスで取りこぼされた可能性を考慮して2手先まで総当たりする。
+
+    Returns: (status, payload)
+      status="move":     payload=採用したUSI文字列のリスト（1〜2手）
+      status="nochange": payload=0（写真がboardと完全一致）
+      status="error":    payload=デバッグ情報dict（現状の認識ミス扱い）
+    """
+    diff0 = diff_count(board_to_label_grid(board), recognized)
+    if diff0 == 0:
+        return "nochange", diff0
+
+    for depth in (1, 2):
+        best_diff, best_seqs = _best_legal_sequences(board, recognized, depth)
+        if best_diff is not None and best_diff <= move_threshold:
+            if len(best_seqs) == 1:
+                return "move", [m.usi() for m in best_seqs[0]]
+            return "error", {
+                "reason": "ambiguous", "depth": depth, "diff0": diff0,
+                "best_diff": best_diff,
+                "candidates": [[m.usi() for m in seq] for seq in best_seqs],
+            }
+
+    return "error", {"reason": "no_match", "diff0": diff0}
 
 # ===== KIF出力 =====
 def save_kif(moves_usi, out_path):
@@ -392,7 +436,6 @@ def main():
     img_direction_confirmed="right"  # 確定した画像回転方向（デフォルト横向き）
     transforms_list=[lambda g:g]
     board=shogi.Board()
-    prev_labels=None
     moves_usi=[]
     last_new=time.time()
     move_count=0
@@ -516,30 +559,30 @@ def main():
                     calib_M = cand_M
                     img_direction_confirmed = img_direction  # 確定した回転方向を保存
                     transforms_list = [lambda g: g]  # 画像回転済みなのでグリッド変換不要
-                    prev_labels = labels
                     processed.add(img_path.name)
                     print(f"\n  [対局開始] キャリブレーション確定。以降の手を記録します。\n")
                     continue
 
-                # 各手: 差分検出（画像を同じ方向に回転してから認識）
+                # 各手: 画像を同じ方向に回転してから認識し、boardと比較して指し手を判定
+                # （直前の写真ではなくboard=確定済み盤面と比較するため、駒のずれ直しや
+                #  照明変化のようなノイズが乗っても、合法手としての説明力が最良なら採用できる）
                 img_rotated = rotate_image_for_direction(img, img_direction_confirmed)
                 warped=cv2.warpPerspective(img_rotated,calib_M,(900,900))
                 labels=predict_board(model,warped)
-                src,dst=detect_changes(prev_labels,labels)
-                if not src and not dst:
-                    processed.add(img_path.name); continue
-                cands=infer_move(src,dst)
-                mv=find_legal(cands,board)
-                if mv:
-                    moves_usi.append(mv); board.push_usi(mv)
-                    move_count+=1
-                    prev_labels=labels
-                    print(f"  [{move_count}手目] {mv}  ({datetime.now():%H:%M:%S})")
+                status, payload = classify_frame(board, labels)
+                if status=="move":
+                    usi_seq=payload
+                    for mv in usi_seq:
+                        moves_usi.append(mv); board.push_usi(mv)
+                        move_count+=1
+                    tag = usi_seq[-1] if len(usi_seq)==1 else f"{usi_seq} (2手分まとめて復元)"
+                    print(f"  [{move_count}手目] {tag}  ({datetime.now():%H:%M:%S})")
                     # KIF逐次更新
                     save_kif(moves_usi, out/"live.kif")
+                elif status=="nochange":
+                    print(f"  [補正] 駒のずれ/照明変化と判断、手は記録しません (diff={payload})")
                 else:
-                    print(f"  [認識ミス] 手を確定できず（保留）: src={src}, dst={dst}")
-                    # prev_labelsは更新せず、次の画像で再トライ
+                    print(f"  [認識ミス] 手を確定できず（保留）: {payload}")
                 processed.add(img_path.name)
 
         # 対局終了判定

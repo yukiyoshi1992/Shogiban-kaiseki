@@ -1,8 +1,29 @@
-# 作業引き継ぎ（2026-06-18〜19 セッション、2026-06-19続き×3）
+# 作業引き継ぎ（2026-06-18〜19 セッション、2026-06-19続き×4）
 
 このファイルは直近セッションの作業ログ。次回セッションは
 **`CLAUDE.md`（リポジトリ構造・コマンド・アーキテクチャ）と本ファイルを読めば続きから再開できる**ことを目的に作成。
 プロジェクトの企画・要件・設計の全体像は`CLAUDE.md`を参照（旧`docs/引き継ぎ資料.md`は2026-06-19に`docs/@old/`へ移動・非メンテナンス化）。
+
+## 2026-06-19 続きその4：Streamlit画面実装開始＋Discordをwebhook→ボットに切替
+
+### 1. Streamlit画面実装（進行中）
+`docs/01 要件定義/画面要件.xlsx`の確定仕様に基づき、`train/src/app_streamlit.py`を新規作成。設計判断・実装詳細はCLAUDE.mdの「Streamlit operator screen」節を参照。要点：
+- `run_realtime.py`を`import`して判定ロジック（向き判定・赤丸キャリブレーション・classify_frame・KIF出力など）を再利用する方式を採用（ユーザー承認済み、ロジックの三重管理を避けるため）。
+- 4ボタン（対局準備/対局開始/対局終了/対局中止）+メッセージwindowを実装。
+- 対局準備：自動3チェック（向き判定→赤丸キャリブレーション→初期配置照合）→失敗時は`streamlit-image-coordinates`による向き選択+四隅クリックの手動キャリブレーションUIにフォールバック。
+- 対局開始：`st.fragment(run_every=5)`で`runtime/input`を定期監視、新規画像をclassify_frameで解析しKIF逐次更新。KIFファイル名は仕様の`yyyyMMdd_hh:mm`がWindowsで使えないため`yyyyMMdd_hh-mm`（ハイフン）に変更（ユーザー承認済み、唯一の仕様からの逸脱点）。
+- 画面要件No.6（認識エラー時の自動中止）も実装済み：classify_frameが"error"を返した時点で即座に【対局エラー中止】にリネームして対局を終了する。
+- **検証状況**：ブラウザでのUI実機テストはまだ未実施（次回ユーザーと一緒にUATを行う予定）。`streamlit.testing.v1.AppTest`を使ったヘッドレスのコード経路スモークテストは実施済み：対局準備（実際にruntime/input内の既存画像で自動チェック失敗→manual_calibへの遷移を確認）、手動キャリブレーションの向き選択→四隅クリック画面遷移、対局開始（KIF即時作成・既存ファイルのベースライン取得を確認）、監視中の1サイクル（認識→classify_frame→自動中止→ファイルリネームを確認）、対局終了/対局中止ボタン、いずれも例外なし。スモークテストで使った一時ファイルは`runtime/`から削除済み（`runtime/`は本番専用ルールを維持）。
+- **未実施**：実際のブラウザでの動作確認（UAT）。優先度2,3の任意項目（classify_frame厳密化、向き判定への駒位置併用）。
+
+### 2. Discord通知をwebhookからボットへ切替
+ユーザーの方針転換により、Discord通知の送信方式をwebhookから実際のDiscordボットに変更。
+- ボットトークンは`docs/discord_token.txt`に保存（gitignore対象、`.gitignore`に追記済み）。
+- `.claude/hooks/discord_notify.py`を改修：`DISCORD_WEBHOOK_URL`へのPOSTから、`https://discord.com/api/v10/channels/{channel_id}/messages`への`Authorization: Bot <token>`付きPOSTに変更。トークンは環境変数ではなく`docs/discord_token.txt`から直接読む実装（トークン更新時に`settings.local.json`を触らなくて済むため）。
+- `.claude/settings.local.json`の`env`を`DISCORD_WEBHOOK_URL`→`DISCORD_CHANNEL_ID`に変更（チャンネルIDは旧webhook URLをGETして`channel_id`フィールドから取得）。
+- 手動テストで200成功を確認済み。
+- **副産物**：このセッション中盤で「Discordに通知が来ない」という報告があり、調査の結果、(a) フックコマンドのパスを絶対パスに変更（相対パスでは自動発火しなかった可能性）、(b) `discord_notify.py`に呼び出しごとのデバッグログ（`train/test_runs/discord_hook_debug.log`、gitignore対象）を追加、という2点を対応済み。今後通知が来ない場合はまずこのログを確認すること。また、Stopフックは「Claudeが応答を完全に終えてユーザーに制御を返すタイミング」でのみ発火する（1ターン内の個々のメッセージ単位では発火しない）ため、長い作業中のターンでは通知が遅れて見える点もユーザーに説明済み。
+- **重要**：この連携は一方向（Claude→Discord）のみ。Discord側からの返信をClaude Codeが読み取る機能はない（ユーザーから質問があり明確化済み）。
 
 ## 2026-06-19 続きその3：run_realtime.py修正の実機確認／フォルダ整理／新テストデータ評価／Discord連携
 
@@ -283,14 +304,15 @@ cells/ 合計: 17,982枚 → **33,129枚**（+15,147 = 187画像×81マス）
 TOTAL: 33,129枚（pattern11修正後・全データソース目視確認済みの正しい状態）
 ```
 
-## 次回やること（優先順、2026-06-19セッション続きその3終了時点で更新）
+## 次回やること（優先順、2026-06-19セッション続きその4終了時点で更新）
 
-001生データ（旧001）も新テストデータ（001/002）も決着済み。次回の優先順位：
+Discordのwebhook→ボット切替は完了。Streamlit画面（`train/src/app_streamlit.py`）は骨格〜対局終了/中止/エラー中止まで実装し、ヘッドレスのコード経路スモークテスト（`AppTest`）は通過済みだが、**ブラウザでの実機UAT・画面要件No.6以外の任意項目はまだ**。次回の優先順位：
 
-1. **【最優先】Streamlit簡易画面の実装** — `docs/01 要件定義/画面要件.xlsx`の確定仕様（4ボタン＋メッセージwindow、KIFファイル名の状態遷移、認識エラー時の自動中止仕様）に基づいて実装。設計時の注意点は上記7参照（バックグラウンド監視、四隅クリックUI、`pip install streamlit streamlit-image-coordinates`済み）。UATもこのタイミングで実施予定。
-2. **（任意・余裕があれば）`classify_frame`の採用判定を厳密化する** — 新テストデータ001で見つかった設計上の弱点（CLAUDE.md「New held-out test data evaluation」節）：`MOVE_DIFF_THRESHOLD<=2`での採用が、本来depth2で完全に説明できたはずのケースを不完全な1手で通してしまい、1手分のズレが後から大きなエラー連鎖を引き起こす。候補手を採用する条件を「diffが厳密に0になる手（必要なら深さを増やして探索）」に変更し、どの深さでも0に到達しなければ`"error"`とする方向の修正が考えられる（既存の「曖昧なら保留」方針と一致）。修正したら002・新テスト001/002の3パターン全てで退行がないことを確認すること。
-3. **向き判定に駒位置も使う拡張**（ニースツーハブ、未着手）— `detect_move.py`の`detect_orientation_from_initial()`を`run_realtime.py`に移植。
-4. **画面要件.xlsx No.6（認識エラー時の自動中止）の実装** — Streamlit実装と合わせてKIFファイル名の状態遷移を持つ側で対応するのが自然。
+1. **【最優先】StreamlitアプリのUAT（実機確認）** — ユーザーと一緒に実際に新しい対局を撮影しながら、`streamlit run train/src/app_streamlit.py`で本番想定フォルダ（`runtime/input`→`runtime/result`）に対して4ボタン+メッセージwindowの動作を確認する。手動キャリブレーションUI（向き選択+streamlit-image-coordinatesでの四隅クリック）も含めて実際にクリックして検証すること（コードレベルのスモークテストは済んでいるが、ブラウザでの見た目・操作感は未確認）。
+2. **（任意・ユーザー承認済み、余裕があれば）`classify_frame`の採用判定を厳密化する** — 新テストデータ001で見つかった設計上の弱点（CLAUDE.md「New held-out test data evaluation」節）：`MOVE_DIFF_THRESHOLD<=2`での採用が、本来depth2で完全に説明できたはずのケースを不完全な1手で通してしまい、1手分のズレが後から大きなエラー連鎖を引き起こす。候補手を採用する条件を「diffが厳密に0になる手（必要なら深さを増やして探索）」に変更し、どの深さでも0に到達しなければ`"error"`とする方向の修正が考えられる（既存の「曖昧なら保留」方針と一致）。`run_realtime.py`/`detect_move.py`両方を修正し、002・新テスト001/002の3パターン全てで退行がないことを確認すること（`app_streamlit.py`は`run_realtime.py`をimportしているので、修正すれば自動的に反映される）。
+3. **向き判定に駒位置も使う拡張**（ニースツーハブ、未着手）— `detect_move.py`の`detect_orientation_from_initial()`（rot180/swap候補の一致率判定）を`run_realtime.py`の対局準備フローに移植し、青三角判定のクロスチェックとして使う。
+
+画面要件.xlsx No.6（認識エラー時の自動中止）は`app_streamlit.py`に実装済み（`watch_fragment()`が`classify_frame`の`"error"`を検知した時点で即座に`【対局エラー中止】`にリネーム）。
 
 ## 中断・再開について
 

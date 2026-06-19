@@ -4,3 +4,4 @@ runtime/
 __pycache__/
 *.pyc
 .claude/settings.local.json
+docs/discord_token.txt

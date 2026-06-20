@@ -17,10 +17,18 @@
 ### Discordとの連携（経過）
 セッション中、ユーザーから（Discord Channels経由で）「確認待ちのタイミングで『PCを見てください』通知が来なかった」との指摘があった。前回セッションで要望として記録されたのみで未実装だった機能（`docs/handover.md`旧8番）であることを案内し、ユーザーは「優先度は低いので、UAT対応の手が空いたタイミングで進めて良い」と回答。**次回（または本セッション後半で余裕があれば）対応するタスクとして保留中**（`.claude/settings.local.json`へのNotificationフック等の追加が必要、未着手）。
 
+### Discord「PCを見てください」通知ルールの実装（同セッション内、ユーザーがUAT対応中に並行実施）
+ユーザーから「UATは自分で進めるので、Discord通知の件をお願いします」と確認を得て、課題①②対応と同じセッション内で実装した。詳細はCLAUDE.mdの「「PCを見てください」通知 (2026-06-20)」節を参照。要点：
+- `.claude/hooks/discord_notify.py`を拡張し、`Stop`（既存、直近の応答テキスト転送）に加えて`Notification`イベント（`permission_prompt`/`idle_prompt`時に短い呼びかけを送る）にも対応。
+- `.claude/settings.local.json`（gitignore対象）に両イベントのhook登録と`DISCORD_CHANNEL_ID`を設定（現在稼働中のDiscord Channels連携と同じチャンネルIDを再利用）。
+- 手動でstdinに合成ペイロードを流し込んで動作確認、実際にDiscordへメッセージが届くことを`fetch_messages`で確認済み（Stop・Notification両方）。
+- **副産物（発見・修正済み）**：`discord_notify.py`のデバッグログ出力先`_DEBUG_LOG`が、2026-06-19のフォルダ整理（`train/test_runs/`→`train/data/test_runs/`）に追従しておらず、古いパスに書き続けていた（気づかれず`train/test_runs/`が復活していた）。パスを修正し、復活していた古いフォルダは削除済み。
+- **未確定・要観察**：`Notification`イベントのstdin JSONの正確なフィールド名はAnthropic公式ドキュメントにも明記がなく、複数の候補キーを試す防御的な実装にしてある。実際に本物の権限確認プロンプトが発生したタイミングで`train/data/test_runs/discord_hook_debug.log`を確認し、`raw_input`の内容が想定と一致しているか（特に通知種別・本文の抽出が空になっていないか）を次回以降に確認すること。
+
 ### 次回やること（優先順、本セッション時点で更新）
 
 1. **【最優先】UATの継続** — `UAT/case1/`同様、追加のUATケースを実施し、新たな課題・要望が出れば随時対応する。
-2. （低優先度・ユーザー承認済み、UAT対応の手が空いたタイミングで）Discord「PCを見てください」通知ルールの実装。`.claude/settings.local.json`へのhook追加（`Notification`フック等の調査から）。
+2. （要確認）Discord「PCを見てください」通知が実際の`Notification`イベント（本物の権限確認プロンプト等）でも正しく内容を抽出できているか、次に発生したタイミングでログを確認する。
 3. （任意・余裕があれば）`classify_frame`の採用判定厳密化（CLAUDE.md「New held-out test data evaluation」節参照）。
 4. （任意・低優先度、ユーザーより「リソースが余っていればやる程度」と確認済み）次PJ（Androidアプリ化、別フォルダへ移動済み）への引継ぎ情報整理。
 

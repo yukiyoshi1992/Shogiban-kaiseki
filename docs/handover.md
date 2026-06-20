@@ -25,9 +25,12 @@
 - **副産物（発見・修正済み）**：`discord_notify.py`のデバッグログ出力先`_DEBUG_LOG`が、2026-06-19のフォルダ整理（`train/test_runs/`→`train/data/test_runs/`）に追従しておらず、古いパスに書き続けていた（気づかれず`train/test_runs/`が復活していた）。パスを修正し、復活していた古いフォルダは削除済み。
 - **未確定・要観察**：`Notification`イベントのstdin JSONの正確なフィールド名はAnthropic公式ドキュメントにも明記がなく、複数の候補キーを試す防御的な実装にしてある。実際に本物の権限確認プロンプトが発生したタイミングで`train/data/test_runs/discord_hook_debug.log`を確認し、`raw_input`の内容が想定と一致しているか（特に通知種別・本文の抽出が空になっていないか）を次回以降に確認すること。
 
+### UAT case2: 手動キャリブレーションの向き選択ステップで画像を表示
+`UAT/case2/課題・要望.txt`（要望①）に対応。詳細はCLAUDE.mdの「UAT case2 (2026-06-20)」節を参照。`render_manual_calibration()`の`manual_step=="direction"`分岐に、向き選択前のオリジナル画像（`st.session_state.manual_raw_img`）を`st.image()`で表示する処理を追加した。これにより、認識失敗時に手動キャリブレーションへ進んだ際、`runtime/input`のファイルを探しに行かなくてもどの画像が対象かを画面上で確認できる。`streamlit.testing.v1.AppTest`で例外が出ないことのみ確認（`st.image`要素自体をAppTestで検証する手段はない）。**ユーザー確認済み：case2でそもそも自動キャリブレーションが失敗した原因は操作ミスであり、調査不要。**
+
 ### 次回やること（優先順、本セッション時点で更新）
 
-1. **【最優先】UATの継続** — `UAT/case1/`同様、追加のUATケースを実施し、新たな課題・要望が出れば随時対応する。
+1. **【最優先】UATの継続** — `UAT/case1/`・`UAT/case2/`同様、追加のUATケースを実施し、新たな課題・要望が出れば随時対応する。
 2. （要確認）Discord「PCを見てください」通知が実際の`Notification`イベント（本物の権限確認プロンプト等）でも正しく内容を抽出できているか、次に発生したタイミングでログを確認する。
 3. （任意・余裕があれば）`classify_frame`の採用判定厳密化（CLAUDE.md「New held-out test data evaluation」節参照）。
 4. （任意・低優先度、ユーザーより「リソースが余っていればやる程度」と確認済み）次PJ（Androidアプリ化、別フォルダへ移動済み）への引継ぎ情報整理。

@@ -165,6 +165,11 @@ def render_manual_calibration():
     st.subheader("手動キャリブレーション")
 
     if st.session_state.manual_step == "direction":
+        st.image(
+            cv2.cvtColor(st.session_state.manual_raw_img, cv2.COLOR_BGR2RGB),
+            caption="使用する画像（向き選択前のオリジナル）",
+            width="stretch",
+        )
         choice = st.radio(
             "盤の向きを選択してください（画像の回転方向）",
             list(DIRECTION_LABELS.keys()),

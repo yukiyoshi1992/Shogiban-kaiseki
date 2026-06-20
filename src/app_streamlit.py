@@ -167,9 +167,10 @@ def render_manual_calibration():
     if st.session_state.manual_step == "direction":
         st.image(
             cv2.cvtColor(st.session_state.manual_raw_img, cv2.COLOR_BGR2RGB),
-            caption="使用する画像（向き選択前のオリジナル）",
+            caption="使用する画像（向き選択前のオリジナル・確認用、クリックはできません）",
             width="stretch",
         )
+        st.caption("※四隅のクリックは、下で向きを確定した次の画面で行います。")
         choice = st.radio(
             "盤の向きを選択してください（画像の回転方向）",
             list(DIRECTION_LABELS.keys()),

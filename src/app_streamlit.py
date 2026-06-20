@@ -264,7 +264,7 @@ def finish_game(new_prefix: str, extra_message: str = ""):
         new_path = rename_kif_prefix(st.session_state.kif_path, new_prefix)
         st.session_state.kif_path = new_path
         n = len(st.session_state.moves_usi)
-        st.session_state.message = f"{extra_message}{new_prefix} {n}手まで記録。ファイル: {new_path.name}"
+        st.session_state.message = f"{extra_message}{new_prefix} {n}手まで記録。ファイル: {new_path}"
     else:
         st.session_state.message = f"{extra_message}{new_prefix}（記録なし）"
     reset_game_state()

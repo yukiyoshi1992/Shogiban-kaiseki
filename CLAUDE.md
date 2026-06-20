@@ -10,6 +10,8 @@ Production code — the live recognition engine and the operator screen — live
 
 For in-progress work and session-to-session continuity, see `docs/handover.md` (Japanese handover doc) — it is the authoritative source of truth for project status and should be consulted/updated alongside this file. (The older `docs/引き継ぎ資料.md` is archived at `docs/@old/引き継ぎ資料.md` as of 2026-06-19 — it's superseded by `docs/handover.md` and this file, not actively maintained.)
 
+**Project status: complete, as of 2026-06-20.** The user has declared this project done. It is now a **read-only reference** — do not add new features here. The successor project (native Android app + FastAPI server, replacing this Streamlit/folder-sync tool) lives at `\\YukiYoshiNAS\Shogiban-kaiseki-appli`; that project's `CLAUDE.md` and `01 企画・管理\handover.md` contain a curated summary of what's reusable from here (model, `classify_frame`, calibration math, KIF generation) and the hard-won lessons from this project's history. If you've been asked to work in *this* repo after this date, confirm with the user first — it may be a misdirected request meant for the successor repo.
+
 ## Commands
 
 All scripts are run directly with `python`, no build step. Paths in this repo are a Windows network share (`\\YukiYoshiNAS\Shogiban-kaiseki-tool\`); when invoked from a POSIX shell (bash tool) use `//YukiYoshiNAS/Shogiban-kaiseki-tool/...` instead of backslashes.

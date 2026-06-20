@@ -62,6 +62,7 @@ def init_state():
         moves_usi=[],
         kif_path=None,
         processed=set(),
+        pending_finish_prefix=None,  # "finishing"中に保留している対局終了後のプレフィックス
         manual_step=None,       # None / "direction" / "corners"
         manual_direction=None,
         manual_raw_img=None,
@@ -80,6 +81,7 @@ def reset_game_state():
     st.session_state.moves_usi = []
     st.session_state.kif_path = None
     st.session_state.processed = set()
+    st.session_state.pending_finish_prefix = None
     st.session_state.manual_step = None
     st.session_state.manual_direction = None
     st.session_state.manual_raw_img = None
@@ -262,17 +264,29 @@ def finish_game(new_prefix: str, extra_message: str = ""):
     reset_game_state()
 
 
+def unprocessed_files():
+    files = list(WATCH_DIR.glob("*.jpg")) + list(WATCH_DIR.glob("*.JPG"))
+    return [f for f in files if f.name not in st.session_state.processed]
+
+
+def request_finish(new_prefix: str):
+    # 対局終了/対局中止ボタン押下時、まだ解析していない画像が残っていれば即終了せず、
+    # watch_fragmentに残りを処理させてから自動的にfinish_gameする（課題①対応）。
+    if not unprocessed_files():
+        finish_game(new_prefix)
+        return
+    st.session_state.phase = "finishing"
+    st.session_state.pending_finish_prefix = new_prefix
+    st.session_state.message = "分析対応中...お待ちください（残り画像を解析しています）"
+
+
 # ===== 対局中: 新規画像の監視・解析（st.fragmentで定期実行） =====
 @st.fragment(run_every=POLL_INTERVAL_SEC)
 def watch_fragment():
-    if st.session_state.phase != "playing":
+    if st.session_state.phase not in ("playing", "finishing"):
         return
 
-    files = sorted(
-        list(WATCH_DIR.glob("*.jpg")) + list(WATCH_DIR.glob("*.JPG")),
-        key=lambda p: p.stat().st_mtime,
-    )
-    new_files = [f for f in files if f.name not in st.session_state.processed]
+    new_files = sorted(unprocessed_files(), key=lambda p: p.stat().st_mtime)
 
     model = get_model()
     aborted = False
@@ -312,6 +326,12 @@ def watch_fragment():
 
     if aborted:
         st.rerun()  # ボタンの有効/無効状態を即時反映するため全体を再実行
+        return
+
+    if st.session_state.phase == "finishing" and not unprocessed_files():
+        finish_game(st.session_state.pending_finish_prefix)
+        st.rerun()  # ボタンの有効/無効状態を即時反映するため全体を再実行
+        return
 
     st.text_area("メッセージ", st.session_state.message, height=200, disabled=True,
                  key=f"msg_playing_{len(st.session_state.processed)}")
@@ -323,7 +343,7 @@ def main():
     st.title("将棋盤画像解析 — 対局記録ツール")
 
     cols = st.columns(4)
-    prep_disabled = st.session_state.phase not in ("idle",)
+    prep_disabled = st.session_state.phase not in ("idle", "ready")
     start_disabled = st.session_state.phase != "ready"
     end_disabled = st.session_state.phase != "playing"
     abort_disabled = st.session_state.phase != "playing"
@@ -340,16 +360,16 @@ def main():
         start_game()
         st.rerun()
     if end_clicked:
-        finish_game("【対局完了】")
+        request_finish("【対局完了】")
         st.rerun()
     if abort_clicked:
-        finish_game("【対局中止】")
+        request_finish("【対局中止】")
         st.rerun()
 
     if st.session_state.phase == "manual_calib":
         st.text_area("メッセージ", st.session_state.message, height=150, disabled=True)
         render_manual_calibration()
-    elif st.session_state.phase == "playing":
+    elif st.session_state.phase in ("playing", "finishing"):
         watch_fragment()
     else:
         st.text_area("メッセージ", st.session_state.message, height=200, disabled=True)

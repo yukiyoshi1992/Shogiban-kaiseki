@@ -1,1 +1,1 @@
-python -m streamlit run src/app_streamlit.py --server.headless true
+python -m streamlit run //YukiYoshiNAS/Shogiban-kaiseki-tool/src/app_streamlit.py --server.headless true
